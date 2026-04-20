@@ -21,12 +21,15 @@ on:
 jobs:
   build:
     runs-on: windows-2022
-    
+    permissions:
+      contents: write  # 必须开启，才能创建 Release 和上传附件
+      packages: write  # 如果你需要上传到 GitHub Packages (可选)
     # 设置环境变量，强制使用本地 VS 工具链
     env:
       DEPOT_TOOLS_WIN_TOOLCHAIN: 0
       PYTHONHTTPSVERIFY: 0
       CLANG_WIN_PATH: 'C:\Program Files\LLVM'
+      MY_DIST_NAME: "skia-windows-x64-static.zip"
 
     steps:
       # 1. 开启 Windows 长路径支持 (防止 Skia 深度嵌套目录报错)
@@ -111,7 +114,7 @@ jobs:
           cp -r skia-source/modules/skparagraph/include/ dist/skparagraph
           cp -r skia-source/modules/skshaper/include/ dist/skshaper
           # 将 include 目录打包成 zip（Windows 下推荐）
-          7z a dist.zip dist
+          7z a "${{ env.MY_DIST_NAME }}" dist
 
       - name: Upload to GitHub Release
         if: inputs.create_release == true
@@ -123,6 +126,6 @@ jobs:
           draft: false
           prerelease: false
           # 指定要上传的文件路径（支持通配符）
-          files: dist.zip
+          files: "${{ env.MY_DIST_NAME }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
