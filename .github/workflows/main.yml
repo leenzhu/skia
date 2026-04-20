@@ -14,7 +14,10 @@ on:
           - Release
           - Debug
         default: 'Release'
-
+      create_release:
+              description: '是否同步发布到 Release?'
+              type: boolean
+              default: true
 jobs:
   build:
     runs-on: windows-2022
@@ -29,10 +32,6 @@ jobs:
       # 1. 开启 Windows 长路径支持 (防止 Skia 深度嵌套目录报错)
       - name: Enable Long Paths
         run: git config --global core.longpaths true
-
-      # 2. 检出脚本（从当前运行分支，通常是 main）
-      - name: Checkout Workflows
-        uses: actions/checkout@v4
 
       # 3. 检出目标代码（根据输入参数检出 B 分支）
       - name: Checkout Target Code
@@ -81,7 +80,7 @@ jobs:
         shell: cmd
         run: |
           cd skia-source
-          bin\gn gen out\Static --args="is_official_build=true is_debug=${{ inputs.build_type == 'Debug' }} target_cpu=\"x64\" skia_enable_skshaper=true skia_enable_skparagraph=true skia_use_icu=false skia_use_system_expat=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false clang_win=\"%CLANG_WIN_PATH%\""
+          bin\gn gen out\Static --args="is_official_build=true is_debug=${{ inputs.build_type == 'Debug' }} target_cpu=\"x64\" skia_enable_skshaper=true skia_enable_skparagraph=true skia_use_icu=false skia_use_system_expat=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_system_harfbuzz=false clang_win=\"%CLANG_WIN_PATH%\""
 
       # 9. 执行编译
       - name: Build (Ninja)
@@ -100,3 +99,30 @@ jobs:
             skia-source/include/
             skia-source/modules/skparagraph/include/
             skia-source/modules/skshaper/include/
+
+      - name: Create Release Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          # 收集所有 .lib 文件，也可以根据需要包含 include 文件夹
+          cp skia-source/out/ClangRelease/*.lib dist/
+          cp -r skia-source/include/ dist/
+          mkdir dist/{skparagraph,skshaper}
+          cp -r skia-source/modules/skparagraph/include/ dist/skparagraph
+          cp -r skia-source/modules/skshaper/include/ dist/skshaper
+          # 将 include 目录打包成 zip（Windows 下推荐）
+          7z a dist.zip dist
+
+      - name: Upload to GitHub Release
+        if: inputs.create_release == true
+        uses: softprops/action-gh-release@v2
+        with:
+          # 定义 Release 的名称和 Tag
+          tag_name: skia-build-${{ inputs.compile_branch }}-${{ github.run_number }}
+          name: Skia Build [${{ inputs.compile_branch }}]
+          draft: false
+          prerelease: false
+          # 指定要上传的文件路径（支持通配符）
+          files: dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
