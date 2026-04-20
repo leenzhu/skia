@@ -36,6 +36,17 @@ jobs:
       - name: Enable Long Paths
         run: git config --global core.longpaths true
 
+      # 2. Sanitize branch name
+      - name: Sanitize branch name
+        shell: bash
+        run: |
+          # 获取输入的分支名
+          RAW_BRANCH="${{ inputs.compile_branch }}"
+          # 使用 sed 将所有斜杠 / 替换为短横线 -
+          SAFE_BRANCH=$(echo "$RAW_BRANCH" | sed 's/[^a-zA-Z0-9._-]/_/g')
+          # 存入环境变量，供后续步骤使用
+          echo "SAFE_BRANCH_NAME=$SAFE_BRANCH" >> $GITHUB_ENV
+          echo "custom env: ${{env.SAFE_BRANCH_NAME}}"
       # 3. 检出目标代码（根据输入参数检出 B 分支）
       - name: Checkout Target Code
         uses: actions/checkout@v4
@@ -89,6 +100,7 @@ jobs:
       - name: Build (Ninja)
         shell: cmd
         run: |
+          echo "custom env: ${{env.SAFE_BRANCH_NAME}}"
           cd skia-source
           ninja -C out\static
 
@@ -96,7 +108,7 @@ jobs:
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: skia-windows-${{ inputs.compile_branch }}-${{ inputs.build_type }}
+          name: skia-windows-${{ env.SAFE_BRANCH_NAME }}-${{ inputs.build_type }}
           path: |
             skia-source/out/static/*.lib
             skia-source/include/
