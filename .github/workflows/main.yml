@@ -1,14 +1,28 @@
 name: Build Skia Library
-on: workflow_dispatch
+on: 
+  workflow_dispatch:
+    inputs:
+      target_branch:
+        description: '请输入要编译的分支名（例如：main）'
+        required: true
+        default: 'main'
+        
 jobs:
   Build-for-windows:
     name: build-for-windows
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v6 
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{inputs.target_branch }}
+          submodules: recursive
       - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
-        
-  
-  
+      - run: python3 tools/git-sync-deps
+      - name: Cache third party libraries
+        uses: actions/cache@v4
+        with:
+          path: third_party/externals
+          key: ${{ runner.os }}-depot-${{ inputs.target_branch}}
+    
