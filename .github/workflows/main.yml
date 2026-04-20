@@ -80,14 +80,14 @@ jobs:
         shell: cmd
         run: |
           cd skia-source
-          bin\gn gen out\Static --args="is_official_build=true is_debug=${{ inputs.build_type == 'Debug' }} target_cpu=\"x64\" skia_enable_skshaper=true skia_enable_skparagraph=true skia_use_icu=false skia_use_system_expat=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_system_harfbuzz=false clang_win=\"%CLANG_WIN_PATH%\""
+          bin\gn gen out\static --args="is_official_build=true is_debug=${{ inputs.build_type == 'Debug' }} target_cpu=\"x64\" skia_enable_skshaper=true skia_enable_skparagraph=true skia_use_icu=false skia_use_system_expat=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false skia_use_system_harfbuzz=false clang_win=\"%CLANG_WIN_PATH%\""
 
       # 9. 执行编译
       - name: Build (Ninja)
         shell: cmd
         run: |
           cd skia-source
-          ninja -C out\Static skia modules
+          ninja -C out\static
 
       # 10. 上传编译产物
       - name: Upload Artifacts
@@ -95,7 +95,7 @@ jobs:
         with:
           name: skia-windows-${{ inputs.compile_branch }}-${{ inputs.build_type }}
           path: |
-            skia-source/out/Static/*.lib
+            skia-source/out/static/*.lib
             skia-source/include/
             skia-source/modules/skparagraph/include/
             skia-source/modules/skshaper/include/
@@ -105,7 +105,7 @@ jobs:
         run: |
           mkdir -p dist
           # 收集所有 .lib 文件，也可以根据需要包含 include 文件夹
-          cp skia-source/out/ClangRelease/*.lib dist/
+          cp skia-source/out/static/*.lib dist/
           cp -r skia-source/include/ dist/
           mkdir dist/{skparagraph,skshaper}
           cp -r skia-source/modules/skparagraph/include/ dist/skparagraph
