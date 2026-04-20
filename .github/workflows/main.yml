@@ -1,28 +1,102 @@
-name: Build Skia Library
-on: 
+name: Build Skia for Windows (Global)
+
+on:
   workflow_dispatch:
     inputs:
-      target_branch:
-        description: '请输入要编译的分支名（例如：main）'
+      compile_branch:
+        description: '要编译的代码分支 (Target branch to compile)'
         required: true
         default: 'main'
-        
+      build_type:
+        description: '编译类型'
+        type: choice
+        options:
+          - Release
+          - Debug
+        default: 'Release'
+
 jobs:
-  Build-for-windows:
-    name: build-for-windows
-    runs-on: windows-latest
+  build:
+    runs-on: windows-2022
+    
+    # 设置环境变量，强制使用本地 VS 工具链
+    env:
+      DEPOT_TOOLS_WIN_TOOLCHAIN: 0
+      PYTHONHTTPSVERIFY: 0
+      CLANG_WIN_PATH: 'C:\Program Files\LLVM'
+
     steps:
-      - uses: actions/checkout@v6
+      # 1. 开启 Windows 长路径支持 (防止 Skia 深度嵌套目录报错)
+      - name: Enable Long Paths
+        run: git config --global core.longpaths true
+
+      # 2. 检出脚本（从当前运行分支，通常是 main）
+      - name: Checkout Workflows
+        uses: actions/checkout@v4
+
+      # 3. 检出目标代码（根据输入参数检出 B 分支）
+      - name: Checkout Target Code
+        uses: actions/checkout@v4
         with:
-          ref: ${{inputs.target_branch }}
-          submodules: recursive
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.13'
-      - run: python3 tools/git-sync-deps
-      - name: Cache third party libraries
+          ref: ${{ inputs.compile_branch }}
+          path: skia-source
+
+      # 4. 缓存 Depot Tools (Google 编译工具链)
+      - name: Cache Depot Tools
         uses: actions/cache@v4
         with:
-          path: third_party/externals
-          key: ${{ runner.os }}-depot-${{ inputs.target_branch}}
-    
+          path: depot_tools
+          key: ${{ runner.os }}-depot-tools
+          restore-keys: |
+            ${{ runner.os }}-depot-tools
+
+      # 5. 安装 Depot Tools
+      - name: Install Depot Tools
+        shell: bash
+        run: |
+          if [ ! -d "depot_tools" ]; then
+            git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
+          fi
+          echo "$(pwd)/depot_tools" >> $GITHUB_PATH
+
+      # 6. 缓存 Skia 外部依赖 (最建议缓存的部分)
+      - name: Cache Skia Externals
+        uses: actions/cache@v4
+        with:
+          path: skia-source/third_party/externals
+          key: ${{ runner.os }}-skia-externals-${{ inputs.compile_branch }}
+          restore-keys: |
+            ${{ runner.os }}-skia-externals-main
+            ${{ runner.os }}-skia-externals-
+
+      # 7. 同步 Skia 依赖
+      - name: Sync Dependencies
+        shell: bash
+        run: |
+          cd skia-source
+          python3 tools/git-sync-deps
+
+      # 8. 配置编译参数 (针对代码高亮服务优化)
+      - name: Configure (GN)
+        shell: cmd
+        run: |
+          cd skia-source
+          bin\gn gen out\Static --args="is_official_build=true is_debug=${{ inputs.build_type == 'Debug' }} target_cpu=\"x64\" skia_enable_skshaper=true skia_enable_skparagraph=true skia_use_icu=false skia_use_system_expat=false skia_use_system_libjpeg_turbo=false skia_use_system_libpng=false skia_use_system_libwebp=false skia_use_system_zlib=false clang_win=\"%CLANG_WIN_PATH%\""
+
+      # 9. 执行编译
+      - name: Build (Ninja)
+        shell: cmd
+        run: |
+          cd skia-source
+          ninja -C out\Static skia modules
+
+      # 10. 上传编译产物
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: skia-windows-${{ inputs.compile_branch }}-${{ inputs.build_type }}
+          path: |
+            skia-source/out/Static/*.lib
+            skia-source/include/
+            skia-source/modules/skparagraph/include/
+            skia-source/modules/skshaper/include/
